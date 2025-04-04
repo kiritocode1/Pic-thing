@@ -2,11 +2,12 @@
 
 import type React from "react";
 import { useState, useRef } from "react";
-import { Upload, X } from "lucide-react";
+import { Upload, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { z } from "zod";
-
+// use this package to remove background from image
+import { removeBackground } from "@imgly/background-removal";
 // Define the allowed file types
 const ALLOWED_FILE_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 
@@ -22,9 +23,25 @@ export function ImageUploader() {
 	// In the useState declaration, add a comment about the image URL
 	// This is where the image URL (base64 string) is stored after upload
 	const [image, setImage] = useState<string | null>(null);
+	const [processedImage, setProcessedImage] = useState<string | null>(null);
 	const [isDragging, setIsDragging] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [isProcessing, setIsProcessing] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
+
+	const processImage = async (imageUrl: string) => {
+		try {
+			setIsProcessing(true);
+			const blob = await removeBackground(imageUrl);
+			const processedUrl = URL.createObjectURL(blob);
+			setProcessedImage(processedUrl);
+		} catch (err) {
+			setError("Failed to remove background. Please try again.");
+			console.error("Background removal error:", err);
+		} finally {
+			setIsProcessing(false);
+		}
+	};
 
 	const validateAndProcessFile = (file: File) => {
 		try {
@@ -36,9 +53,10 @@ export function ImageUploader() {
 
 			const reader = new FileReader();
 			reader.onload = () => {
-				// The image URL is set here as a base64 string
-				setImage(reader.result as string);
+				const imageUrl = reader.result as string;
+				setImage(imageUrl);
 				setError(null);
+				processImage(imageUrl);
 			};
 			reader.readAsDataURL(file);
 		} catch (err) {
@@ -77,6 +95,7 @@ export function ImageUploader() {
 
 	const clearImage = () => {
 		setImage(null);
+		setProcessedImage(null);
 		setError(null);
 		if (fileInputRef.current) {
 			fileInputRef.current.value = "";
@@ -121,7 +140,7 @@ export function ImageUploader() {
 				</CardContent>
 			</Card>
 
-			{image && (
+			{(image || processedImage) && (
 				<div className="w-full max-w-2xl">
 					<div className="flex justify-between items-center mb-4">
 						<h2 className="text-xl font-semibold">Preview</h2>
@@ -134,17 +153,41 @@ export function ImageUploader() {
 							<X className="h-5 w-5" />
 						</Button>
 					</div>
-					<Card className="overflow-hidden bg-zinc-900 border-zinc-800">
-						<div className="relative aspect-video bg-zinc-800 flex items-center justify-center">
-							<img
-								// This is where the image URL is used for display
-								// The image state variable contains the base64 data URL of the uploaded image
-								src={image || "/placeholder.svg"}
-								alt="Uploaded preview"
-								className="max-h-full max-w-full object-contain"
-							/>
-						</div>
-					</Card>
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<Card className="overflow-hidden bg-zinc-900 border-zinc-800">
+							<div className="relative aspect-video bg-zinc-800 flex items-center justify-center">
+								{image && (
+									<img
+										src={image}
+										alt="Original image"
+										className="max-h-full max-w-full object-contain"
+									/>
+								)}
+							</div>
+							<div className="p-4 text-center">
+								<p className="text-sm text-zinc-400">Original Image</p>
+							</div>
+						</Card>
+						<Card className="overflow-hidden bg-zinc-900 border-zinc-800">
+							<div className="relative aspect-video bg-zinc-800 flex items-center justify-center">
+								{isProcessing ? (
+									<div className="flex flex-col items-center justify-center">
+										<Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+										<p className="mt-2 text-sm text-zinc-400">Removing background...</p>
+									</div>
+								) : processedImage ? (
+									<img
+										src={processedImage}
+										alt="Processed image"
+										className="max-h-full max-w-full object-contain"
+									/>
+								) : null}
+							</div>
+							<div className="p-4 text-center">
+								<p className="text-sm text-zinc-400">Background Removed</p>
+							</div>
+						</Card>
+					</div>
 				</div>
 			)}
 		</div>
