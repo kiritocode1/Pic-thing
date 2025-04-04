@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useState, useRef } from "react";
-import { Upload, X, Loader2 } from "lucide-react";
+import { Upload, X, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { z } from "zod";
@@ -27,19 +27,50 @@ export function ImageUploader() {
 	const [isDragging, setIsDragging] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [isProcessing, setIsProcessing] = useState(false);
+	const [progress, setProgress] = useState(0);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	const processImage = async (imageUrl: string) => {
 		try {
 			setIsProcessing(true);
-			const blob = await removeBackground(imageUrl);
+			setProgress(0);
+			const blob = await removeBackground(imageUrl, {
+				progress: (key, current, total) => {
+					const progress = (current / total) * 100;
+					setProgress(progress);
+					console.log(`${key}: ${current} of ${total}`);
+				},
+				output: {
+					format: "image/png",
+					quality: 0.8,
+				},
+				model: "isnet_fp16", // Use medium model for better quality
+				debug: false, // Disable debug mode to reduce console noise
+				
+			});
 			const processedUrl = URL.createObjectURL(blob);
 			setProcessedImage(processedUrl);
 		} catch (err) {
-			setError("Failed to remove background. Please try again.");
 			console.error("Background removal error:", err);
+			if (err instanceof Error) {
+				setError(`Failed to remove background: ${err.message}`);
+			} else {
+				setError("Failed to remove background. Please try again.");
+			}
 		} finally {
 			setIsProcessing(false);
+			setProgress(0);
+		}
+	};
+
+	const handleDownload = () => {
+		if (processedImage) {
+			const link = document.createElement('a');
+			link.href = processedImage;
+			link.download = 'background-removed.png';
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
 		}
 	};
 
@@ -103,8 +134,8 @@ export function ImageUploader() {
 	};
 
 	return (
-		<div className="flex flex-col items-center space-y-8">
-			<Card className="w-full max-w-2xl bg-zinc-900 border-zinc-800">
+		<div className="flex flex-col items-center space-y-8 w-full">
+			<Card className="w-full max-w-4xl">
 				<CardContent className="p-6">
 					<div
 						className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
@@ -141,21 +172,34 @@ export function ImageUploader() {
 			</Card>
 
 			{(image || processedImage) && (
-				<div className="w-full max-w-2xl">
+				<div className="w-full max-w-6xl">
 					<div className="flex justify-between items-center mb-4">
 						<h2 className="text-xl font-semibold">Preview</h2>
-						<Button
-							variant="ghost"
-							size="icon"
-							onClick={clearImage}
-							className="text-zinc-400 hover:text-white hover:bg-zinc-800"
-						>
-							<X className="h-5 w-5" />
-						</Button>
+						<div className="flex gap-2">
+							{processedImage && (
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={handleDownload}
+									className="flex items-center gap-2"
+								>
+									<Download className="h-4 w-4" />
+									Download
+								</Button>
+							)}
+							<Button
+								variant="ghost"
+								size="icon"
+								onClick={clearImage}
+								className="text-zinc-400 hover:text-white hover:bg-zinc-800"
+							>
+								<X className="h-5 w-5" />
+							</Button>
+						</div>
 					</div>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<Card className="overflow-hidden bg-zinc-900 border-zinc-800">
-							<div className="relative aspect-video bg-zinc-800 flex items-center justify-center">
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+						<Card className="overflow-hidden">
+							<div className="relative aspect-video bg-zinc-800 flex items-center justify-center min-h-[500px]">
 								{image && (
 									<img
 										src={image}
@@ -168,12 +212,22 @@ export function ImageUploader() {
 								<p className="text-sm text-zinc-400">Original Image</p>
 							</div>
 						</Card>
-						<Card className="overflow-hidden bg-zinc-900 border-zinc-800">
-							<div className="relative aspect-video bg-zinc-800 flex items-center justify-center">
+						<Card className="overflow-hidden">
+							<div className="relative aspect-video bg-zinc-800 flex items-center justify-center min-h-[500px]">
 								{isProcessing ? (
-									<div className="flex flex-col items-center justify-center">
-										<Loader2 className="h-8 w-8 animate-spin text-purple-500" />
-										<p className="mt-2 text-sm text-zinc-400">Removing background...</p>
+									<div className="flex flex-col items-center justify-center w-full">
+										<Loader2 className="h-8 w-8 animate-spin text-purple-500 mb-4" />
+										<div className="w-full max-w-xs">
+											<div className="h-2 bg-zinc-700 rounded-full overflow-hidden">
+												<div
+													className="h-full bg-purple-500 transition-all duration-300"
+													style={{ width: `${progress}%` }}
+												/>
+											</div>
+										</div>
+										<p className="mt-2 text-sm text-zinc-400">
+											Removing background... {Math.round(progress)}%
+										</p>
 									</div>
 								) : processedImage ? (
 									<img
