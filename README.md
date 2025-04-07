@@ -1,5 +1,4 @@
-# Pic thing ???
-
+# Pic thing ???**
 ![banner](/src/app/og-image.png)
 
 theo made his api too expensive, so i made it cheaper (free and open source)
